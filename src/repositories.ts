@@ -1,7 +1,8 @@
 import {AppDataSource} from "../src/datasource";
-import {User} from "../src//model";
+import {User, otp, otpPurpose} from "../src/model";
 
 const userRepository = AppDataSource.getRepository(User);
+const otpRepository = AppDataSource.getRepository(otp);
 
 export async function createuserRepository(data: Partial<User>) {
     const user = userRepository.create(data);
@@ -12,13 +13,6 @@ export async function createuserRepository(data: Partial<User>) {
 export async function findUserByEmailRepository(email:string){
     return userRepository.findOne({
         where:{email},
-        select: {
-            id:true,
-            name:true,
-            email:true,
-            phoneNumber:true,
-            role:true, 
-        },
     });
 }
 
@@ -31,6 +25,7 @@ export async function findUserByIdRepository(id:string) {
             email: true,
             phoneNumber:true, 
             role:true,
+             isVerified: true,
         },
     });
 }
@@ -86,3 +81,51 @@ export async function deleteuserRepository(id:string){
     return userRepository.delete({id});
 }
 
+
+
+
+// OTP OPERATIONS
+
+export async function createOtpRepository(data: Partial<otp>) {
+  const otpRecord = otpRepository.create(data);
+  return otpRepository.save(otpRecord);
+}
+
+export async function findLatestOtpRepository(
+  email: string,
+  purpose: otpPurpose
+) {
+  return otpRepository.findOne({
+    where: {
+      email,
+      purpose,
+      isUsed: false,
+    },
+    order: {
+      createdAt: "DESC",
+    },
+  });
+}
+
+export async function updateOtpRepository(
+  id: string,
+  data: Partial<otp>
+) {
+  return otpRepository.update({ id }, data);
+}
+
+export async function invalidateOtpsRepository(
+  email: string,
+  purpose: otpPurpose
+) {
+  return otpRepository.update(
+    {
+      email,
+      purpose,
+      isUsed: false,
+    },
+    {
+      isUsed: true,
+    }
+  );
+}
