@@ -1,5 +1,5 @@
 import {DataSource} from "typeorm"
-import {User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "../src/model"
+import {User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "./model"
 import "dotenv/config";
 
 

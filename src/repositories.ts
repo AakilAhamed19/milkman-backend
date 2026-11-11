@@ -1,5 +1,5 @@
-import {AppDataSource} from "../src/datasource";
-import {User, otp, otpPurpose, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "../src/model";
+import {AppDataSource} from "./datasource";
+import {User, otp, otpPurpose, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "./model";
 
 const userRepository = AppDataSource.getRepository(User);
 const otpRepository = AppDataSource.getRepository(otp);
