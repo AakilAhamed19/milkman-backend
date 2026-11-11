@@ -14,16 +14,30 @@ import {
     verifyRegisterOtp,
     forgetPassword,
     resetPassword,
+    createUserByAdmin,
+    changeTemporaryPassword,
+    getCustomers,
+    createCustomer,
+    updateCustomer,
+    deleteCustomer,
+    getDeliveries,
+    createDelivery,
+    getPayments,
+    createPayment,
+    getPrices,
+    createPrice,
+    getAttendance,
+    recordAttendance,
 } from "./controller";
 
-import { authMiddleware } from "./auth.middleware";
+import { authMiddleware, adminOnly } from "./auth.middleware";
 
 const router = Router();
 
-// REGISTER USER (PUBLIC)
+// FIRST ADMIN REGISTRATION (PUBLIC)
 router.post("/registeruser", registeruser);
 
-// VERIFY REGISTER OTP (PUBLIC)
+// VERIFY ADMIN REGISTRATION OTP (PUBLIC)
 router.post("/verify-otp", verifyRegisterOtp);
 
 // LOGIN USER (PUBLIC)
@@ -34,6 +48,21 @@ router.post("/forgot-password", forgetPassword);
 
 // RESET PASSWORD (PUBLIC)
 router.post("/reset-password", resetPassword);
+
+// CREATE EMPLOYEE (ADMIN ONLY)
+router.post(
+    "/add-user",
+    authMiddleware,
+    adminOnly,
+    createUserByAdmin
+);
+
+// EMPLOYEE CHANGE TEMPORARY PASSWORD (AUTHENTICATED)
+router.post(
+    "/change-temporary-password",
+    authMiddleware,
+    changeTemporaryPassword
+);
 
 // GET ALL USERS (PROTECTED)
 router.get("/users", authMiddleware, getAllUsers);
@@ -55,5 +84,27 @@ router.put("/users/:id", authMiddleware, updateUser);
 
 // DELETE USER (PROTECTED)
 router.delete("/users/:id", authMiddleware, deleteUser);
+
+// CUSTOMER ROUTES (PROTECTED)
+router.get("/customers", authMiddleware, getCustomers);
+router.post("/customers", authMiddleware, createCustomer);
+router.put("/customers/:id", authMiddleware, updateCustomer);
+router.delete("/customers/:id", authMiddleware, deleteCustomer);
+
+// DELIVERY ROUTES (PROTECTED)
+router.get("/deliveries", authMiddleware, getDeliveries);
+router.post("/deliveries", authMiddleware, createDelivery);
+
+// PAYMENT ROUTES (PROTECTED)
+router.get("/payments", authMiddleware, getPayments);
+router.post("/payments", authMiddleware, createPayment);
+
+// PRICE ROUTES (PROTECTED)
+router.get("/prices", authMiddleware, getPrices);
+router.post("/prices", authMiddleware, createPrice);
+
+// ATTENDANCE ROUTES (PROTECTED)
+router.get("/attendance", authMiddleware, getAttendance);
+router.post("/attendance", authMiddleware, recordAttendance);
 
 export default router;

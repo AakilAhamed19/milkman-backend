@@ -1,8 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from "typeorm";
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+} from "typeorm";
 
 export type otpPurpose = "register" | "reset_password";
 export type userRole = "admin" | "employee";
 
+// USER ENTITY
 @Entity()
 export class User {
     @PrimaryGeneratedColumn("uuid")
@@ -20,37 +26,182 @@ export class User {
     @Column({ type: "varchar" })
     password!: string;
 
-    @Column({ type: "enum", enum: ["admin", "employee"], default: "employee" })
+    @Column({
+        type: "enum",
+        enum: ["admin", "employee"],
+        default: "employee",
+    })
     role!: userRole;
 
-     @Column({ type: "boolean", default: false })
-      isVerified!: boolean;
-   }
+    @Column({ type: "boolean", default: false })
+    isVerified!: boolean;
 
-// otp
+    // Employee must change temporary password after first login
+    @Column({ type: "boolean", default: false })
+    mustChangePassword!: boolean;
+}
+
+// OTP ENTITY
 @Entity()
 export class otp {
-  @PrimaryGeneratedColumn("uuid")
-  id!: string;
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
 
-  @Column({ type: "varchar" })
-  email!: string;
-   
-  @Column({ type: "varchar" })
-  otpHash!: string;
+    @Column({ type: "varchar" })
+    email!: string;
 
-  @Column({ type: "timestamp" })
-  expiresAt!: Date;
+    @Column({ type: "varchar" })
+    otpHash!: string;
 
-  @Column({ type: "enum", enum: ["register", "reset_password"] })
-  purpose!: otpPurpose;
+    @Column({ type: "timestamp" })
+    expiresAt!: Date;
 
-  @Column({ type: "int", default: 0 })
-  attempts!: number;
+    @Column({
+        type: "enum",
+        enum: ["register", "reset_password"],
+    })
+    purpose!: otpPurpose;
 
-  @Column({ type: "boolean", default: false })
-  isUsed!: boolean;
+    @Column({ type: "int", default: 0 })
+    attempts!: number;
 
-  @CreateDateColumn()
-  createdAt!: Date;
+    @Column({ type: "boolean", default: false })
+    isUsed!: boolean;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
+
+// CUSTOMER ENTITY
+@Entity()
+export class CustomerEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    name!: string;
+
+    @Column({ type: "varchar" })
+    phone!: string;
+
+    @Column({ type: "varchar" })
+    area!: string;
+
+    @Column({ type: "varchar", default: "cow" })
+    milkType!: string;
+
+    @Column({ type: "float", default: 0 })
+    morningQty!: number;
+
+    @Column({ type: "float", default: 0 })
+    eveningQty!: number;
+
+    @Column({ type: "float", nullable: true })
+    priceOverride!: number | null;
+
+    @Column({ type: "varchar" })
+    startDate!: string;
+
+    @Column({ type: "boolean", default: true })
+    active!: boolean;
+
+    @Column({ type: "varchar", default: "retail" })
+    customerType!: "retail" | "wholesale";
+
+    @Column({ type: "varchar", nullable: true })
+    businessName!: string | null;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
+
+// DELIVERY ENTITY
+@Entity()
+export class DeliveryEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    customerId!: string;
+
+    @Column({ type: "varchar" })
+    date!: string;
+
+    @Column({ type: "varchar" })
+    shift!: "morning" | "evening";
+
+    @Column({ type: "float" })
+    quantity!: number;
+
+    @Column({ type: "float" })
+    unitPrice!: number;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
+
+// PAYMENT ENTITY
+@Entity()
+export class PaymentEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    customerId!: string;
+
+    @Column({ type: "varchar" })
+    date!: string;
+
+    @Column({ type: "float" })
+    amount!: number;
+
+    @Column({ type: "varchar", default: "cash" })
+    mode!: "cash" | "upi" | "bank";
+
+    @Column({ type: "text", nullable: true })
+    note!: string;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
+
+// PRICE ENTITY
+@Entity()
+export class PriceEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    milkType!: string;
+
+    @Column({ type: "float" })
+    amount!: number;
+
+    @Column({ type: "varchar" })
+    effectiveFrom!: string;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
+
+// ATTENDANCE ENTITY
+@Entity()
+export class AttendanceEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    employeeId!: string;
+
+    @Column({ type: "varchar" })
+    date!: string;
+
+    @Column({ type: "varchar", default: "present" })
+    status!: "present" | "half-day" | "absent";
+
+    @Column({ type: "text", nullable: true })
+    notes!: string;
+
+    @CreateDateColumn()
+    createdAt!: Date;
 }
