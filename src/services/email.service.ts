@@ -1,26 +1,41 @@
 import nodemailer from "nodemailer";
 
-// CREATE EMAIL TRANSPORTER
+// CREATE EMAIL TRANSPORTER (Supports Brevo SMTP or Brevo API Key)
 function createEmailTransporter() {
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
+    // Brevo SMTP credentials
+    // Host: smtp-relay.brevo.com
+    // Port: 587 (TLS) or 465 (SSL)
+    // User: Brevo account login email or SMTP login
+    // Pass: Brevo Master SMTP key / API key
+    const host = process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST || "smtp-relay.brevo.com";
+    const port = Number(process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT) || 587;
+    const user = process.env.BREVO_USER || process.env.BREVO_SMTP_USER || process.env.EMAIL_USER;
+    const pass = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_KEY || process.env.BREVO_PASSWORD || process.env.EMAIL_PASS;
 
-    if (!emailUser || !emailPass) {
-        throw new Error("Gmail SMTP credentials (EMAIL_USER or EMAIL_PASS) are missing in environment variables");
+    if (!user || !pass) {
+        throw new Error("Brevo SMTP credentials (BREVO_USER and BREVO_API_KEY / BREVO_SMTP_KEY) are missing in environment variables");
     }
 
     return nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true, // SSL
+        host: host.trim(),
+        port: port,
+        secure: port === 465, // true for 465, false for 587
         auth: {
-            user: emailUser.trim(),
-            pass: emailPass.trim(),
+            user: user.trim(),
+            pass: pass.trim(),
         },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 15000,
     });
+}
+
+function getSenderEmail(): string {
+    const sender = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || process.env.BREVO_USER;
+    if (!sender) {
+        throw new Error("Sender email (BREVO_SENDER_EMAIL or EMAIL_USER) is missing");
+    }
+    return sender.trim();
 }
 
 // ADMIN REGISTRATION OTP EMAIL
@@ -28,16 +43,11 @@ export async function sendOtpEmail(
     email: string,
     otp: string
 ) {
-    const emailUser = process.env.EMAIL_USER;
-
-    if (!emailUser) {
-        throw new Error("EMAIL_USER is missing");
-    }
-
+    const senderEmail = getSenderEmail();
     const transporter = createEmailTransporter();
 
     await transporter.sendMail({
-        from: `"PaalKhata" <${emailUser.trim()}>`,
+        from: `"PaalKhata" <${senderEmail}>`,
         to: email,
         subject: "PaalKhata - Email Verification OTP",
         text: `Your PaalKhata verification OTP is ${otp}. It expires in 5 minutes. Do not share this OTP with anyone.`,
@@ -55,7 +65,7 @@ export async function sendOtpEmail(
         `,
     });
 
-    console.log(`OTP email sent successfully to ${email}`);
+    console.log(`Brevo: OTP email sent successfully to ${email}`);
 }
 
 // EMPLOYEE TEMPORARY LOGIN CREDENTIALS EMAIL
@@ -64,19 +74,13 @@ export async function sendEmployeeCredentialsEmail(
     email: string,
     temporaryPassword: string
 ) {
-    const emailUser = process.env.EMAIL_USER;
-
-    if (!emailUser) {
-        throw new Error("EMAIL_USER is missing");
-    }
-
+    const senderEmail = getSenderEmail();
     const transporter = createEmailTransporter();
 
     await transporter.sendMail({
-        from: `"PaalKhata" <${emailUser.trim()}>`,
+        from: `"PaalKhata" <${senderEmail}>`,
         to: email,
         subject: "PaalKhata - Your Employee Login Credentials",
-
         text: `
 Hello ${name},
 
@@ -90,7 +94,6 @@ Please log in and change your temporary password immediately.
 Thank you,
 PaalKhata Team
         `,
-
         html: `
             <div style="font-family: Arial, sans-serif; padding: 20px;">
                 <h2>Welcome to PaalKhata, ${name}!</h2>
@@ -114,5 +117,5 @@ PaalKhata Team
         `,
     });
 
-    console.log(`Employee credentials email sent to ${email}`);
+    console.log(`Brevo: Employee credentials email sent to ${email}`);
 }
