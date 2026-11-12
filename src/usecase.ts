@@ -102,9 +102,7 @@ async function sendAndSaveOtp(
 
         console.error("OTP Email Error:", error);
 
-        throw new Error(
-            "Unable to send OTP email. Please try again"
-        );
+        throw new Error(`Unable to send OTP email: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -754,4 +752,5 @@ export async function getAttendanceUseCase(date?: string) {
     }
     return getAttendanceByDateRepository(targetDate);
 }
+
 
