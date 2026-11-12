@@ -1,4 +1,3 @@
-
 import nodemailer from "nodemailer";
 
 // CREATE EMAIL TRANSPORTER
@@ -16,6 +15,9 @@ function createEmailTransporter() {
             user: emailUser,
             pass: emailPass,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
     });
 }
 

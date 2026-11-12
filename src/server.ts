@@ -1,4 +1,3 @@
-
 import "reflect-metadata";
 import express from "express";
 import cors from "cors";
@@ -18,29 +17,35 @@ app.use(
 // JSON MIDDLEWARE
 app.use(express.json());
 
+// Ensure Database is initialized before handling requests
+app.use(async (req, res, next) => {
+    try {
+        if (!AppDataSource.isInitialized) {
+            await AppDataSource.initialize();
+        }
+        next();
+    } catch (error) {
+        console.error("Database connection error:", error);
+        res.status(500).json({ message: "Database connection failed", error: String(error) });
+    }
+});
+
+// HEALTH CHECK / ROOT
+app.get("/", (req, res) => {
+    res.json({ status: "ok", message: "PaalKhata Backend is running" });
+});
+
 // USER ROUTES
 app.use("/api/user", userRoute);
 
 // SERVER PORT
 const port = Number(process.env.PORT) || 5000;
 
-// START SERVER
-async function startServer() {
-    try {
-        // Connect PostgreSQL database
-        await AppDataSource.initialize();
-
-        console.log("Database connected successfully");
-
-        // Start Express server
-        app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
-        });
-
-    } catch (error) {
-        console.error("Error during server initialization:", error);
-        process.exit(1);
-    }
+// Only listen when running standalone (e.g. Render, local), not in serverless environments
+if (process.env.NODE_ENV !== "production" || process.env.RENDER) {
+    app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+    });
 }
 
-startServer();
+export default app;
