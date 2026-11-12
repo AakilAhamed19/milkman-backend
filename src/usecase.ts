@@ -754,3 +754,4 @@ export async function getAttendanceUseCase(date?: string) {
     }
     return getAttendanceByDateRepository(targetDate);
 }
+

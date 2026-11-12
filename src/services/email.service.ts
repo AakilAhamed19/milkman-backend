@@ -6,14 +6,16 @@ function createEmailTransporter() {
     const emailPass = process.env.EMAIL_PASS;
 
     if (!emailUser || !emailPass) {
-        throw new Error("Gmail SMTP credentials are missing");
+        throw new Error("Gmail SMTP credentials (EMAIL_USER or EMAIL_PASS) are missing in environment variables");
     }
 
     return nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // SSL
         auth: {
-            user: emailUser,
-            pass: emailPass,
+            user: emailUser.trim(),
+            pass: emailPass.trim(),
         },
         connectionTimeout: 10000,
         greetingTimeout: 10000,
@@ -35,7 +37,7 @@ export async function sendOtpEmail(
     const transporter = createEmailTransporter();
 
     await transporter.sendMail({
-        from: `"PaalKhata" <${emailUser}>`,
+        from: `"PaalKhata" <${emailUser.trim()}>`,
         to: email,
         subject: "PaalKhata - Email Verification OTP",
         text: `Your PaalKhata verification OTP is ${otp}. It expires in 5 minutes. Do not share this OTP with anyone.`,
@@ -71,7 +73,7 @@ export async function sendEmployeeCredentialsEmail(
     const transporter = createEmailTransporter();
 
     await transporter.sendMail({
-        from: `"PaalKhata" <${emailUser}>`,
+        from: `"PaalKhata" <${emailUser.trim()}>`,
         to: email,
         subject: "PaalKhata - Your Employee Login Credentials",
 
