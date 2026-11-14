@@ -13,7 +13,10 @@ import {
     findLatestOtpRepository,
     updateOtpRepository,
     invalidateOtpsRepository,
-    createTenantRepository,
+    createFarmRepository,
+    findFarmByIdRepository,
+    getAllFarmsRepository,
+    updateFarmRepository,
 } from "./repositories";
 
 import {
@@ -34,7 +37,7 @@ type UserRole = "admin" | "employee";
 
 export interface RegisterUserInput {
     name: string;
-    dairyName?: string | undefined;
+    farmName?: string | undefined;
     email: string;
     phoneNumber: string;
     password: string;
@@ -153,12 +156,12 @@ async function verifyOtp(
     });
 }
 
-// REGISTER FIRST ADMIN (CREATES A NEW TENANT / DAIRY ORGANIZATION)
+// REGISTER FIRST ADMIN (CREATES A NEW FARM / ORGANIZATION)
 export async function registerUserUsecase(
     data: RegisterUserInput
 ) {
     const name = data.name.trim();
-    const dairyName = (data.dairyName || `${name}'s Dairy`).trim();
+    const farmName = (data.farmName || `${name}'s Farm`).trim();
     const email = data.email.trim().toLowerCase();
     const phoneNumber = data.phoneNumber.trim();
 
@@ -186,8 +189,12 @@ export async function registerUserUsecase(
         };
     }
 
-    // Create a Tenant for this new Admin's Dairy Business
-    const tenant = await createTenantRepository(dairyName, email);
+    // Create a new Farm (Organization)
+    const farm = await createFarmRepository({
+        name: farmName,
+        ownerEmail: email,
+        phoneNumber,
+    });
 
     // Hash Admin password
     const hashedPassword = await bcrypt.hash(
@@ -195,10 +202,10 @@ export async function registerUserUsecase(
         10
     );
 
-    // Create Admin account attached to the Tenant
+    // Create Admin account attached to the Farm
     await createuserRepository({
-        tenantId: tenant.id,
-        dairyName: dairyName,
+        farmId: farm.id,
+        farmName: farmName,
         name,
         email,
         phoneNumber,
@@ -216,12 +223,12 @@ export async function registerUserUsecase(
     };
 }
 
-// ADMIN CREATES EMPLOYEE (INHERITS ADMIN'S TENANT)
+// ADMIN CREATES EMPLOYEE (INHERITS ADMIN'S FARM)
 export async function createUserByAdminUsecase(
     data: AdminCreateUserInput,
     createdByRole: UserRole,
-    adminTenantId?: string,
-    adminDairyName?: string
+    adminFarmId?: string,
+    adminFarmName?: string
 ) {
     // Only Admin can create Employees
     if (createdByRole !== "admin") {
@@ -254,10 +261,10 @@ export async function createUserByAdminUsecase(
         10
     );
 
-    // Create verified Employee account within the Admin's Tenant
+    // Create verified Employee account within the Admin's Farm
     const employee = await createuserRepository({
-        tenantId: adminTenantId,
-        dairyName: adminDairyName,
+        farmId: adminFarmId,
+        farmName: adminFarmName,
         name,
         email,
         phoneNumber,
@@ -293,14 +300,14 @@ export async function createUserByAdminUsecase(
             email: employee.email,
             phoneNumber: employee.phoneNumber,
             role: employee.role,
-            tenantId: employee.tenantId,
+            farmId: employee.farmId,
         },
     };
 }
 
-// GET ALL USERS (SCOPED TO TENANT)
-export async function getAllUsersUseCase(tenantId?: string) {
-    return getAllUserRepository(tenantId);
+// GET ALL USERS (SCOPED TO FARM)
+export async function getAllUsersUseCase(farmId?: string) {
+    return getAllUserRepository(farmId);
 }
 
 // GET USER BY ID
@@ -309,16 +316,16 @@ export async function getUserByIdUseCase(id: string) {
 }
 
 // GET USER BY NAME
-export async function getUserByNameUseCase(name: string, tenantId?: string) {
-    return findUserByNameRepository(name, tenantId);
+export async function getUserByNameUseCase(name: string, farmId?: string) {
+    return findUserByNameRepository(name, farmId);
 }
 
 // GET USER BY MOBILE
 export async function getUserByMobileUseCase(
     phoneNumber: string,
-    tenantId?: string
+    farmId?: string
 ) {
-    return findUserByMobileRepository(phoneNumber, tenantId);
+    return findUserByMobileRepository(phoneNumber, farmId);
 }
 
 // GET USER BY EMAIL
@@ -586,7 +593,7 @@ export async function changeTemporaryPasswordUsecase(
     };
 }
 
-// LOGIN USER (RETURNS TOKEN WITH TENANT DETAILS)
+// LOGIN USER (RETURNS TOKEN WITH FARM DETAILS)
 export async function loginUserUsecase(
     email: string,
     password: string
@@ -627,8 +634,8 @@ export async function loginUserUsecase(
         {
             userId: user.id,
             role: user.role,
-            tenantId: user.tenantId,
-            dairyName: user.dairyName,
+            farmId: user.farmId,
+            farmName: user.farmName,
         },
         jwtSecret,
         {
@@ -645,94 +652,104 @@ export async function loginUserUsecase(
             email: user.email,
             phoneNumber: user.phoneNumber,
             role: user.role,
-            tenantId: user.tenantId,
-            dairyName: user.dairyName,
+            farmId: user.farmId,
+            farmName: user.farmName,
             mustChangePassword: user.mustChangePassword,
         },
     };
 }
 
-// ================= CUSTOMER USECASES (TENANT SCOPED) =================
-export async function createCustomerUseCase(data: any, tenantId?: string) {
+// ================= FARM CRUD USECASES =================
+export async function getFarmDetailsUseCase(farmId: string) {
+    const farm = await findFarmByIdRepository(farmId);
+    if (!farm) throw new Error("Farm not found");
+    return farm;
+}
+
+export async function updateFarmDetailsUseCase(farmId: string, data: any) {
+    return updateFarmRepository(farmId, data);
+}
+
+// ================= CUSTOMER USECASES (FARM SCOPED) =================
+export async function createCustomerUseCase(data: any, farmId?: string) {
     if (!data.name || !data.phone) {
         throw new Error("Customer name and phone are required");
     }
     const { createCustomerRepository } = await import("./repositories");
-    return createCustomerRepository({ ...data, tenantId });
+    return createCustomerRepository({ ...data, farmId });
 }
 
-export async function getAllCustomersUseCase(tenantId?: string) {
+export async function getAllCustomersUseCase(farmId?: string) {
     const { getAllCustomersRepository } = await import("./repositories");
-    return getAllCustomersRepository(tenantId);
+    return getAllCustomersRepository(farmId);
 }
 
-export async function getCustomerByIdUseCase(id: string, tenantId?: string) {
+export async function getCustomerByIdUseCase(id: string, farmId?: string) {
     const { findCustomerByIdRepository } = await import("./repositories");
-    const customer = await findCustomerByIdRepository(id, tenantId);
+    const customer = await findCustomerByIdRepository(id, farmId);
     if (!customer) throw new Error("Customer not found");
     return customer;
 }
 
-export async function updateCustomerUseCase(id: string, data: any, tenantId?: string) {
+export async function updateCustomerUseCase(id: string, data: any, farmId?: string) {
     const { updateCustomerRepository } = await import("./repositories");
-    const updated = await updateCustomerRepository(id, data, tenantId);
+    const updated = await updateCustomerRepository(id, data, farmId);
     if (!updated) throw new Error("Customer not found");
     return updated;
 }
 
-export async function deleteCustomerUseCase(id: string, tenantId?: string) {
+export async function deleteCustomerUseCase(id: string, farmId?: string) {
     const { deleteCustomerRepository } = await import("./repositories");
-    return deleteCustomerRepository(id, tenantId);
+    return deleteCustomerRepository(id, farmId);
 }
 
-// ================= DELIVERY USECASES (TENANT SCOPED) =================
-export async function createDeliveryUseCase(data: any, tenantId?: string) {
+// ================= DELIVERY USECASES (FARM SCOPED) =================
+export async function createDeliveryUseCase(data: any, farmId?: string) {
     const { createDeliveryRepository } = await import("./repositories");
-    return createDeliveryRepository({ ...data, tenantId });
+    return createDeliveryRepository({ ...data, farmId });
 }
 
-export async function getDeliveriesUseCase(date?: string, tenantId?: string) {
+export async function getDeliveriesUseCase(date?: string, farmId?: string) {
     const { getDeliveriesByDateRepository, getAllDeliveriesRepository } = await import("./repositories");
     if (date) {
-        return getDeliveriesByDateRepository(date, tenantId);
+        return getDeliveriesByDateRepository(date, farmId);
     }
-    return getAllDeliveriesRepository(tenantId);
+    return getAllDeliveriesRepository(farmId);
 }
 
-// ================= PAYMENT USECASES (TENANT SCOPED) =================
-export async function createPaymentUseCase(data: any, tenantId?: string) {
+// ================= PAYMENT USECASES (FARM SCOPED) =================
+export async function createPaymentUseCase(data: any, farmId?: string) {
     const { createPaymentRepository } = await import("./repositories");
-    return createPaymentRepository({ ...data, tenantId });
+    return createPaymentRepository({ ...data, farmId });
 }
 
-export async function getPaymentsUseCase(tenantId?: string) {
+export async function getPaymentsUseCase(farmId?: string) {
     const { getAllPaymentsRepository } = await import("./repositories");
-    return getAllPaymentsRepository(tenantId);
+    return getAllPaymentsRepository(farmId);
 }
 
-// ================= PRICE USECASES (TENANT SCOPED) =================
-export async function createPriceUseCase(data: any, tenantId?: string) {
+// ================= PRICE USECASES (FARM SCOPED) =================
+export async function createPriceUseCase(data: any, farmId?: string) {
     const { createPriceRepository } = await import("./repositories");
-    return createPriceRepository({ ...data, tenantId });
+    return createPriceRepository({ ...data, farmId });
 }
 
-export async function getPricesUseCase(tenantId?: string) {
+export async function getPricesUseCase(farmId?: string) {
     const { getAllPricesRepository } = await import("./repositories");
-    return getAllPricesRepository(tenantId);
+    return getAllPricesRepository(farmId);
 }
 
-// ================= ATTENDANCE USECASES (TENANT SCOPED) =================
-export async function recordAttendanceUseCase(data: any, tenantId?: string) {
+// ================= ATTENDANCE USECASES (FARM SCOPED) =================
+export async function recordAttendanceUseCase(data: any, farmId?: string) {
     const { recordAttendanceRepository } = await import("./repositories");
-    return recordAttendanceRepository({ ...data, tenantId });
+    return recordAttendanceRepository({ ...data, farmId });
 }
 
-export async function getAttendanceUseCase(date?: string, tenantId?: string) {
+export async function getAttendanceUseCase(date?: string, farmId?: string) {
     const { getAttendanceByDateRepository } = await import("./repositories");
     let targetDate: string = new Date().toISOString().split("T")[0]!;
     if (date && typeof date === "string" && date.trim().length > 0) {
         targetDate = date.trim();
     }
-    return getAttendanceByDateRepository(targetDate, tenantId);
+    return getAttendanceByDateRepository(targetDate, farmId);
 }
-

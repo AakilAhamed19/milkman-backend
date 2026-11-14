@@ -9,9 +9,9 @@ import {
 export type otpPurpose = "register" | "reset_password";
 export type userRole = "admin" | "employee";
 
-// TENANT ENTITY (Dairy Organization / Business)
+// FARM ENTITY (Organization / Farm representing each Dairy business)
 @Entity()
-export class TenantEntity {
+export class Farm {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
@@ -21,11 +21,17 @@ export class TenantEntity {
     @Column({ type: "varchar", nullable: true })
     ownerEmail!: string | null;
 
+    @Column({ type: "varchar", nullable: true })
+    phoneNumber!: string | null;
+
+    @Column({ type: "varchar", nullable: true })
+    address!: string | null;
+
     @CreateDateColumn()
     createdAt!: Date;
 }
 
-// USER ENTITY
+// USER ENTITY (Admin or Employee belonging to a Farm)
 @Entity()
 export class User {
     @PrimaryGeneratedColumn("uuid")
@@ -33,10 +39,10 @@ export class User {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar", nullable: true })
-    dairyName!: string | null | undefined;
+    farmName!: string | null | undefined;
 
     @Column({ type: "varchar" })
     name!: string;
@@ -96,7 +102,7 @@ export class otp {
     createdAt!: Date;
 }
 
-// CUSTOMER ENTITY
+// CUSTOMER ENTITY (Scoped to Farm)
 @Entity()
 export class CustomerEntity {
     @PrimaryGeneratedColumn("uuid")
@@ -104,7 +110,7 @@ export class CustomerEntity {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     name!: string;
@@ -143,7 +149,7 @@ export class CustomerEntity {
     createdAt!: Date;
 }
 
-// DELIVERY ENTITY
+// DELIVERY ENTITY (Scoped to Farm)
 @Entity()
 export class DeliveryEntity {
     @PrimaryGeneratedColumn("uuid")
@@ -151,7 +157,7 @@ export class DeliveryEntity {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     customerId!: string;
@@ -172,7 +178,7 @@ export class DeliveryEntity {
     createdAt!: Date;
 }
 
-// PAYMENT ENTITY
+// PAYMENT ENTITY (Scoped to Farm)
 @Entity()
 export class PaymentEntity {
     @PrimaryGeneratedColumn("uuid")
@@ -180,7 +186,7 @@ export class PaymentEntity {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     customerId!: string;
@@ -201,7 +207,7 @@ export class PaymentEntity {
     createdAt!: Date;
 }
 
-// PRICE ENTITY
+// PRICE ENTITY (Scoped to Farm)
 @Entity()
 export class PriceEntity {
     @PrimaryGeneratedColumn("uuid")
@@ -209,7 +215,7 @@ export class PriceEntity {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     milkType!: string;
@@ -224,7 +230,7 @@ export class PriceEntity {
     createdAt!: Date;
 }
 
-// ATTENDANCE ENTITY
+// ATTENDANCE ENTITY (Scoped to Farm)
 @Entity()
 export class AttendanceEntity {
     @PrimaryGeneratedColumn("uuid")
@@ -232,7 +238,7 @@ export class AttendanceEntity {
 
     @Index()
     @Column({ type: "varchar", nullable: true })
-    tenantId!: string | null | undefined;
+    farmId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     employeeId!: string;

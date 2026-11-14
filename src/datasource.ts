@@ -1,5 +1,5 @@
 import {DataSource} from "typeorm"
-import {TenantEntity, User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "./model"
+import {Farm, User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity} from "./model"
 import "dotenv/config";
 
 export const AppDataSource = new DataSource({
@@ -9,7 +9,7 @@ export const AppDataSource = new DataSource({
     username: `${process.env.DB_USER}`,
     password: `${process.env.DB_PASSWORD}`,
     database: `${process.env.DB_NAME}`,
-    entities: [TenantEntity, User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity],
+    entities: [Farm, User, otp, CustomerEntity, DeliveryEntity, PaymentEntity, PriceEntity, AttendanceEntity],
     synchronize: true,
     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 })

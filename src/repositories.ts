@@ -1,6 +1,6 @@
 import { AppDataSource } from "./datasource";
 import {
-    TenantEntity,
+    Farm,
     User,
     otp,
     otpPurpose,
@@ -11,7 +11,7 @@ import {
     AttendanceEntity
 } from "./model";
 
-const tenantRepository = AppDataSource.getRepository(TenantEntity);
+const farmRepository = AppDataSource.getRepository(Farm);
 const userRepository = AppDataSource.getRepository(User);
 const otpRepository = AppDataSource.getRepository(otp);
 const customerRepository = AppDataSource.getRepository(CustomerEntity);
@@ -20,14 +20,25 @@ const paymentRepository = AppDataSource.getRepository(PaymentEntity);
 const priceRepository = AppDataSource.getRepository(PriceEntity);
 const attendanceRepository = AppDataSource.getRepository(AttendanceEntity);
 
-// ================= TENANT OPERATIONS =================
-export async function createTenantRepository(name: string, ownerEmail: string) {
-    const tenant = tenantRepository.create({ name, ownerEmail });
-    return tenantRepository.save(tenant);
+// ================= FARM (ORGANIZATION) OPERATIONS =================
+export async function createFarmRepository(data: { name: string; ownerEmail?: string; phoneNumber?: string; address?: string }) {
+    const farm = farmRepository.create(data);
+    return farmRepository.save(farm);
 }
 
-export async function findTenantByIdRepository(id: string) {
-    return tenantRepository.findOne({ where: { id } });
+export async function findFarmByIdRepository(id: string) {
+    return farmRepository.findOne({ where: { id } });
+}
+
+export async function getAllFarmsRepository() {
+    return farmRepository.find({
+        order: { createdAt: "DESC" },
+    });
+}
+
+export async function updateFarmRepository(id: string, data: Partial<Farm>) {
+    await farmRepository.update({ id }, data);
+    return findFarmByIdRepository(id);
 }
 
 // ================= USER OPERATIONS =================
@@ -52,15 +63,15 @@ export async function findUserByIdRepository(id: string) {
             phoneNumber: true,
             role: true,
             isVerified: true,
-            tenantId: true,
-            dairyName: true,
+            farmId: true,
+            farmName: true,
         },
     });
 }
 
-export async function findUserByNameRepository(name: string, tenantId?: string) {
+export async function findUserByNameRepository(name: string, farmId?: string) {
     const where: any = { name };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return userRepository.find({
         where,
         select: {
@@ -69,15 +80,15 @@ export async function findUserByNameRepository(name: string, tenantId?: string) 
             email: true,
             phoneNumber: true,
             role: true,
-            tenantId: true,
-            dairyName: true,
+            farmId: true,
+            farmName: true,
         },
     });
 }
 
-export async function findUserByMobileRepository(phoneNumber: string, tenantId?: string) {
+export async function findUserByMobileRepository(phoneNumber: string, farmId?: string) {
     const where: any = { phoneNumber };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return userRepository.findOne({
         where,
         select: {
@@ -86,15 +97,15 @@ export async function findUserByMobileRepository(phoneNumber: string, tenantId?:
             email: true,
             phoneNumber: true,
             role: true,
-            tenantId: true,
-            dairyName: true,
+            farmId: true,
+            farmName: true,
         },
     });
 }
 
-export async function getAllUserRepository(tenantId?: string) {
+export async function getAllUserRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return userRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         select: {
@@ -104,8 +115,8 @@ export async function getAllUserRepository(tenantId?: string) {
             phoneNumber: true,
             role: true,
             isVerified: true,
-            tenantId: true,
-            dairyName: true,
+            farmId: true,
+            farmName: true,
         },
     });
 }
@@ -173,102 +184,102 @@ export async function invalidateOtpsRepository(
     );
 }
 
-// ================= CUSTOMER REPOSITORIES =================
+// ================= CUSTOMER REPOSITORIES (FARM SCOPED) =================
 export async function createCustomerRepository(data: Partial<CustomerEntity>) {
     const customer = customerRepository.create(data);
     return customerRepository.save(customer);
 }
 
-export async function getAllCustomersRepository(tenantId?: string) {
+export async function getAllCustomersRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return customerRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         order: { createdAt: "DESC" },
     });
 }
 
-export async function findCustomerByIdRepository(id: string, tenantId?: string) {
+export async function findCustomerByIdRepository(id: string, farmId?: string) {
     const where: any = { id };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return customerRepository.findOne({
         where,
     });
 }
 
-export async function updateCustomerRepository(id: string, data: Partial<CustomerEntity>, tenantId?: string) {
+export async function updateCustomerRepository(id: string, data: Partial<CustomerEntity>, farmId?: string) {
     const where: any = { id };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     await customerRepository.update(where, data);
     return customerRepository.findOne({ where: { id } });
 }
 
-export async function deleteCustomerRepository(id: string, tenantId?: string) {
+export async function deleteCustomerRepository(id: string, farmId?: string) {
     const where: any = { id };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return customerRepository.delete(where);
 }
 
-// ================= DELIVERY REPOSITORIES =================
+// ================= DELIVERY REPOSITORIES (FARM SCOPED) =================
 export async function createDeliveryRepository(data: Partial<DeliveryEntity>) {
     const delivery = deliveryRepository.create(data);
     return deliveryRepository.save(delivery);
 }
 
-export async function getDeliveriesByDateRepository(date: string, tenantId?: string) {
+export async function getDeliveriesByDateRepository(date: string, farmId?: string) {
     const where: any = { date };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return deliveryRepository.find({
         where,
     });
 }
 
-export async function getAllDeliveriesRepository(tenantId?: string) {
+export async function getAllDeliveriesRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return deliveryRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         order: { date: "DESC" },
     });
 }
 
-// ================= PAYMENT REPOSITORIES =================
+// ================= PAYMENT REPOSITORIES (FARM SCOPED) =================
 export async function createPaymentRepository(data: Partial<PaymentEntity>) {
     const payment = paymentRepository.create(data);
     return paymentRepository.save(payment);
 }
 
-export async function getAllPaymentsRepository(tenantId?: string) {
+export async function getAllPaymentsRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return paymentRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         order: { date: "DESC" },
     });
 }
 
-// ================= PRICE REPOSITORIES =================
+// ================= PRICE REPOSITORIES (FARM SCOPED) =================
 export async function createPriceRepository(data: Partial<PriceEntity>) {
     const price = priceRepository.create(data);
     return priceRepository.save(price);
 }
 
-export async function getAllPricesRepository(tenantId?: string) {
+export async function getAllPricesRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return priceRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         order: { effectiveFrom: "DESC" },
     });
 }
 
-// ================= ATTENDANCE REPOSITORIES =================
+// ================= ATTENDANCE REPOSITORIES (FARM SCOPED) =================
 export async function recordAttendanceRepository(data: Partial<AttendanceEntity>) {
     if (!data.employeeId || !data.date) {
         throw new Error("Employee ID and Date are required");
     }
     const where: any = { employeeId: data.employeeId, date: data.date };
-    if (data.tenantId) where.tenantId = data.tenantId;
+    if (data.farmId) where.farmId = data.farmId;
 
     const existing = await attendanceRepository.findOne({
         where,
@@ -281,17 +292,17 @@ export async function recordAttendanceRepository(data: Partial<AttendanceEntity>
     return attendanceRepository.save(att);
 }
 
-export async function getAttendanceByDateRepository(date: string, tenantId?: string) {
+export async function getAttendanceByDateRepository(date: string, farmId?: string) {
     const where: any = { date };
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return attendanceRepository.find({
         where,
     });
 }
 
-export async function getAllAttendanceRepository(tenantId?: string) {
+export async function getAllAttendanceRepository(farmId?: string) {
     const where: any = {};
-    if (tenantId) where.tenantId = tenantId;
+    if (farmId) where.farmId = farmId;
     return attendanceRepository.find({
         where: Object.keys(where).length > 0 ? where : undefined,
         order: { date: "DESC" },

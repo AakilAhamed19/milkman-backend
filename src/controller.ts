@@ -15,6 +15,8 @@ import {
     resetPasswordUsecase,
     createUserByAdminUsecase,
     changeTemporaryPasswordUsecase,
+    getFarmDetailsUseCase,
+    updateFarmDetailsUseCase,
 } from "./usecase";
 
 // Helper function for error messages
@@ -24,10 +26,10 @@ function getErrorMessage(error: unknown): string {
         : "Internal server error";
 }
 
-// REGISTER FIRST ADMIN (CREATES DAIRY TENANT)
+// REGISTER FIRST ADMIN (CREATES FARM ORGANIZATION)
 export async function registeruser(req: Request, res: Response) {
     try {
-        const { name, dairyName, email, phoneNumber, password } = req.body ?? {};
+        const { name, farmName, dairyName, email, phoneNumber, password } = req.body ?? {};
 
         if (
             typeof name !== "string" ||
@@ -50,9 +52,11 @@ export async function registeruser(req: Request, res: Response) {
             });
         }
 
+        const farm = typeof farmName === "string" && farmName.trim() ? farmName : (typeof dairyName === "string" ? dairyName : undefined);
+
         const user = await registerUserUsecase({
             name,
-            dairyName: typeof dairyName === "string" ? dairyName : undefined,
+            farmName: farm,
             email,
             phoneNumber,
             password,
@@ -120,11 +124,50 @@ export async function verifyRegisterOtp(req: Request, res: Response) {
     }
 }
 
-// GET ALL USERS (SCOPED TO TENANT)
+// ================= FARM DETAILS CONTROLLERS =================
+export async function getFarmDetails(req: Request, res: Response) {
+    try {
+        const farmId = req.user?.farmId;
+        if (!farmId) {
+            return res.status(400).json({ message: "No farm associated with this user" });
+        }
+        const farm = await getFarmDetailsUseCase(farmId);
+        return res.status(200).json({
+            message: "Farm details fetched successfully",
+            farm,
+        });
+    } catch (error: unknown) {
+        return res.status(500).json({
+            message: "Failed to fetch farm details",
+            error: getErrorMessage(error),
+        });
+    }
+}
+
+export async function updateFarmDetails(req: Request, res: Response) {
+    try {
+        const farmId = req.user?.farmId;
+        if (!farmId) {
+            return res.status(400).json({ message: "No farm associated with this user" });
+        }
+        const updated = await updateFarmDetailsUseCase(farmId, req.body);
+        return res.status(200).json({
+            message: "Farm details updated successfully",
+            farm: updated,
+        });
+    } catch (error: unknown) {
+        return res.status(400).json({
+            message: "Failed to update farm details",
+            error: getErrorMessage(error),
+        });
+    }
+}
+
+// GET ALL USERS (SCOPED TO FARM)
 export async function getAllUsers(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
-        const users = await getAllUsersUseCase(tenantId);
+        const farmId = req.user?.farmId;
+        const users = await getAllUsersUseCase(farmId);
 
         return res.status(200).json({
             message: "Users fetched successfully",
@@ -188,8 +231,8 @@ export async function getUserByName(
             });
         }
 
-        const tenantId = req.user?.tenantId;
-        const users = await getUserByNameUseCase(name, tenantId);
+        const farmId = req.user?.farmId;
+        const users = await getUserByNameUseCase(name, farmId);
 
         return res.status(200).json({
             message: "Users fetched successfully",
@@ -218,8 +261,8 @@ export async function getUserByMobile(
             });
         }
 
-        const tenantId = req.user?.tenantId;
-        const user = await getUserByMobileUseCase(phoneNumber, tenantId);
+        const farmId = req.user?.farmId;
+        const user = await getUserByMobileUseCase(phoneNumber, farmId);
 
         if (!user) {
             return res.status(404).json({
@@ -380,8 +423,8 @@ export async function createUserByAdmin(
         }
 
         const createdByRole = req.user?.role as any;
-        const adminTenantId = req.user?.tenantId;
-        const adminDairyName = req.user?.dairyName;
+        const adminFarmId = req.user?.farmId;
+        const adminFarmName = req.user?.farmName;
 
         const result = await createUserByAdminUsecase(
             {
@@ -390,8 +433,8 @@ export async function createUserByAdmin(
                 phoneNumber,
             },
             createdByRole,
-            adminTenantId,
-            adminDairyName
+            adminFarmId,
+            adminFarmName
         );
 
         return res.status(201).json(result);
@@ -550,12 +593,12 @@ export async function changeTemporaryPassword(
     }
 }
 
-// ================= CUSTOMER CONTROLLERS (TENANT SCOPED) =================
+// ================= CUSTOMER CONTROLLERS (FARM SCOPED) =================
 export async function getCustomers(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { getAllCustomersUseCase } = await import("./usecase");
-        const customers = await getAllCustomersUseCase(tenantId);
+        const customers = await getAllCustomersUseCase(farmId);
         return res.status(200).json({
             message: "Customers fetched successfully",
             customers,
@@ -570,9 +613,9 @@ export async function getCustomers(req: Request, res: Response) {
 
 export async function createCustomer(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { createCustomerUseCase } = await import("./usecase");
-        const customer = await createCustomerUseCase(req.body, tenantId);
+        const customer = await createCustomerUseCase(req.body, farmId);
         return res.status(201).json({
             message: "Customer created successfully",
             customer,
@@ -587,10 +630,10 @@ export async function createCustomer(req: Request, res: Response) {
 
 export async function updateCustomer(req: Request<{ id: string }>, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { id } = req.params;
         const { updateCustomerUseCase } = await import("./usecase");
-        const customer = await updateCustomerUseCase(id, req.body, tenantId);
+        const customer = await updateCustomerUseCase(id, req.body, farmId);
         return res.status(200).json({
             message: "Customer updated successfully",
             customer,
@@ -605,10 +648,10 @@ export async function updateCustomer(req: Request<{ id: string }>, res: Response
 
 export async function deleteCustomer(req: Request<{ id: string }>, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { id } = req.params;
         const { deleteCustomerUseCase } = await import("./usecase");
-        await deleteCustomerUseCase(id, tenantId);
+        await deleteCustomerUseCase(id, farmId);
         return res.status(200).json({
             message: "Customer deleted successfully",
         });
@@ -620,13 +663,13 @@ export async function deleteCustomer(req: Request<{ id: string }>, res: Response
     }
 }
 
-// ================= DELIVERY CONTROLLERS (TENANT SCOPED) =================
+// ================= DELIVERY CONTROLLERS (FARM SCOPED) =================
 export async function getDeliveries(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const date = typeof req.query.date === "string" ? req.query.date : undefined;
         const { getDeliveriesUseCase } = await import("./usecase");
-        const deliveries = await getDeliveriesUseCase(date, tenantId);
+        const deliveries = await getDeliveriesUseCase(date, farmId);
         return res.status(200).json({
             message: "Deliveries fetched successfully",
             deliveries,
@@ -641,9 +684,9 @@ export async function getDeliveries(req: Request, res: Response) {
 
 export async function createDelivery(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { createDeliveryUseCase } = await import("./usecase");
-        const delivery = await createDeliveryUseCase(req.body, tenantId);
+        const delivery = await createDeliveryUseCase(req.body, farmId);
         return res.status(201).json({
             message: "Delivery recorded successfully",
             delivery,
@@ -656,12 +699,12 @@ export async function createDelivery(req: Request, res: Response) {
     }
 }
 
-// ================= PAYMENT CONTROLLERS (TENANT SCOPED) =================
+// ================= PAYMENT CONTROLLERS (FARM SCOPED) =================
 export async function getPayments(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { getPaymentsUseCase } = await import("./usecase");
-        const payments = await getPaymentsUseCase(tenantId);
+        const payments = await getPaymentsUseCase(farmId);
         return res.status(200).json({
             message: "Payments fetched successfully",
             payments,
@@ -676,9 +719,9 @@ export async function getPayments(req: Request, res: Response) {
 
 export async function createPayment(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { createPaymentUseCase } = await import("./usecase");
-        const payment = await createPaymentUseCase(req.body, tenantId);
+        const payment = await createPaymentUseCase(req.body, farmId);
         return res.status(201).json({
             message: "Payment recorded successfully",
             payment,
@@ -691,12 +734,12 @@ export async function createPayment(req: Request, res: Response) {
     }
 }
 
-// ================= PRICE CONTROLLERS (TENANT SCOPED) =================
+// ================= PRICE CONTROLLERS (FARM SCOPED) =================
 export async function getPrices(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { getPricesUseCase } = await import("./usecase");
-        const prices = await getPricesUseCase(tenantId);
+        const prices = await getPricesUseCase(farmId);
         return res.status(200).json({
             message: "Prices fetched successfully",
             prices,
@@ -711,9 +754,9 @@ export async function getPrices(req: Request, res: Response) {
 
 export async function createPrice(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { createPriceUseCase } = await import("./usecase");
-        const price = await createPriceUseCase(req.body, tenantId);
+        const price = await createPriceUseCase(req.body, farmId);
         return res.status(201).json({
             message: "Price saved successfully",
             price,
@@ -726,13 +769,13 @@ export async function createPrice(req: Request, res: Response) {
     }
 }
 
-// ================= ATTENDANCE CONTROLLERS (TENANT SCOPED) =================
+// ================= ATTENDANCE CONTROLLERS (FARM SCOPED) =================
 export async function getAttendance(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const dateParam = typeof req.query.date === "string" ? req.query.date : undefined;
         const { getAttendanceUseCase } = await import("./usecase");
-        const attendance = await getAttendanceUseCase(dateParam, tenantId);
+        const attendance = await getAttendanceUseCase(dateParam, farmId);
         return res.status(200).json({
             message: "Attendance fetched successfully",
             attendance,
@@ -747,9 +790,9 @@ export async function getAttendance(req: Request, res: Response) {
 
 export async function recordAttendance(req: Request, res: Response) {
     try {
-        const tenantId = req.user?.tenantId;
+        const farmId = req.user?.farmId;
         const { recordAttendanceUseCase } = await import("./usecase");
-        const attendance = await recordAttendanceUseCase(req.body, tenantId);
+        const attendance = await recordAttendanceUseCase(req.body, farmId);
         return res.status(200).json({
             message: "Attendance recorded successfully",
             attendance,
@@ -761,5 +804,3 @@ export async function recordAttendance(req: Request, res: Response) {
         });
     }
 }
-
-

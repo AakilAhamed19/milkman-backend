@@ -1,12 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-// JWT PAYLOAD TYPE WITH TENANT ID
+// JWT PAYLOAD TYPE WITH FARM ID
 export interface JwtPayload {
     userId: string;
     role: string;
-    tenantId?: string;
-    dairyName?: string;
+    farmId?: string;
+    farmName?: string;
 }
 
 // EXTEND EXPRESS REQUEST TYPE
@@ -71,12 +71,12 @@ export function authMiddleware(
             return;
         }
 
-        // Attach user and tenant details to request
+        // Attach user and farm details to request
         req.user = {
             userId: decoded.userId,
             role: decoded.role,
-            tenantId: decoded.tenantId,
-            dairyName: decoded.dairyName,
+            farmId: decoded.farmId,
+            farmName: decoded.farmName,
         };
 
         // Continue to controller

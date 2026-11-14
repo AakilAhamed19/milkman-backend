@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 
 import {
@@ -16,6 +15,8 @@ import {
     resetPassword,
     createUserByAdmin,
     changeTemporaryPassword,
+    getFarmDetails,
+    updateFarmDetails,
     getCustomers,
     createCustomer,
     updateCustomer,
@@ -48,6 +49,10 @@ router.post("/forgot-password", forgetPassword);
 
 // RESET PASSWORD (PUBLIC)
 router.post("/reset-password", resetPassword);
+
+// FARM DETAILS (PROTECTED)
+router.get("/farm", authMiddleware, getFarmDetails);
+router.put("/farm", authMiddleware, adminOnly, updateFarmDetails);
 
 // CREATE EMPLOYEE (ADMIN ONLY)
 router.post(
