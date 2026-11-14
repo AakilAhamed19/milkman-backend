@@ -1,15 +1,13 @@
 /**
- * Brevo Transactional Email Service
- * Uses Brevo REST API v3 (https://api.brevo.com/v3/smtp/email)
- * This uses pure HTTPS (port 443), so it NEVER gets blocked by firewalls or cloud hosting ports!
+ * Brevo & Nodemailer Hybrid Email Service
+ * 1. If BREVO_API_KEY (starts with "xkeysib-") is present -> Uses Brevo REST API v3
+ * 2. If SMTP / Gmail credentials are present -> Uses direct Nodemailer SMTP (supports Gmail App Password)
  */
+import nodemailer from "nodemailer";
 
-function getApiKey(): string {
-    const key = process.env.BREVO_API_KEY || process.env.BREVO_SMTP_KEY || process.env.EMAIL_PASS;
-    if (!key) {
-        throw new Error("Brevo API key (BREVO_API_KEY) is missing in environment variables");
-    }
-    return key.trim();
+function isBrevoApiKeyPresent(): boolean {
+    const key = process.env.BREVO_API_KEY;
+    return typeof key === "string" && key.trim().startsWith("xkeysib-");
 }
 
 function getSender() {
@@ -25,13 +23,14 @@ function getSender() {
     };
 }
 
+// Brevo REST API Sender
 async function sendViaBrevoApi(payload: {
     to: { email: string; name?: string }[];
     subject: string;
     htmlContent: string;
     textContent?: string;
 }) {
-    const apiKey = getApiKey();
+    const apiKey = process.env.BREVO_API_KEY!.trim();
     const sender = getSender();
 
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -60,6 +59,66 @@ async function sendViaBrevoApi(payload: {
     return result;
 }
 
+// Nodemailer SMTP Transporter (Fallback for local / Gmail)
+function createSmtpTransporter() {
+    const emailUser = (process.env.EMAIL_USER || "akaakil48@gmail.com").trim();
+    // Strip any accidental spaces from Google App Password
+    const emailPass = (process.env.EMAIL_PASS || "").replace(/\s+/g, "");
+
+    if (!emailUser || !emailPass) {
+        throw new Error("Email credentials (BREVO_API_KEY or EMAIL_USER & EMAIL_PASS) are missing");
+    }
+
+    return nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: emailUser,
+            pass: emailPass,
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+    });
+}
+
+// Universal Sender: Uses Brevo API if configured, else Gmail Nodemailer
+async function sendEmailUniversal(payload: {
+    toEmail: string;
+    toName?: string;
+    subject: string;
+    htmlContent: string;
+    textContent: string;
+}) {
+    if (isBrevoApiKeyPresent()) {
+        try {
+            await sendViaBrevoApi({
+                to: payload.toName ? [{ email: payload.toEmail.trim().toLowerCase(), name: payload.toName }] : [{ email: payload.toEmail.trim().toLowerCase() }],
+                subject: payload.subject,
+                htmlContent: payload.htmlContent,
+                textContent: payload.textContent,
+            });
+            console.log(`[Brevo API] Email sent successfully to ${payload.toEmail}`);
+            return;
+        } catch (err) {
+            console.warn(`[Brevo API] failed, falling back to SMTP:`, err);
+        }
+    }
+
+    // SMTP Fallback
+    const transporter = createSmtpTransporter();
+    const sender = getSender();
+
+    await transporter.sendMail({
+        from: `"PaalKhata" <${sender.email}>`,
+        to: payload.toEmail,
+        subject: payload.subject,
+        text: payload.textContent,
+        html: payload.htmlContent,
+    });
+
+    console.log(`[SMTP] Email sent successfully to ${payload.toEmail}`);
+}
+
 // ADMIN REGISTRATION OTP EMAIL
 export async function sendOtpEmail(
     email: string,
@@ -80,14 +139,12 @@ export async function sendOtpEmail(
 
     const textContent = `Your PaalKhata verification OTP is ${otp}. It expires in 5 minutes. Do not share this OTP with anyone.`;
 
-    await sendViaBrevoApi({
-        to: [{ email: email.trim().toLowerCase() }],
+    await sendEmailUniversal({
+        toEmail: email,
         subject: "PaalKhata - Email Verification OTP",
         htmlContent,
         textContent,
     });
-
-    console.log(`Brevo API: OTP email sent successfully to ${email}`);
 }
 
 // EMPLOYEE TEMPORARY LOGIN CREDENTIALS EMAIL
@@ -132,12 +189,12 @@ Thank you,
 PaalKhata Team
     `.trim();
 
-    await sendViaBrevoApi({
-        to: [{ email: email.trim().toLowerCase(), name: name.trim() }],
+    await sendEmailUniversal({
+        toEmail: email,
+        toName: name,
         subject: "PaalKhata - Your Employee Login Credentials",
         htmlContent,
         textContent,
     });
-
-    console.log(`Brevo API: Employee credentials email sent to ${email}`);
 }
+
