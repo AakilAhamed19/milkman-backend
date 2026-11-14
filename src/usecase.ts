@@ -1,4 +1,5 @@
-
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import {
     createuserRepository,
     findUserByEmailRepository,
@@ -8,21 +9,17 @@ import {
     getAllUserRepository,
     updateUserRepository,
     deleteuserRepository,
-    countAdminUsersRepository,
     createOtpRepository,
     findLatestOtpRepository,
     updateOtpRepository,
     invalidateOtpsRepository,
+    createTenantRepository,
 } from "./repositories";
-
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 
 import {
     randomInt,
+    createHash,
     randomBytes,
-    createHmac,
-    timingSafeEqual,
 } from "crypto";
 
 import {
@@ -37,6 +34,7 @@ type UserRole = "admin" | "employee";
 
 export interface RegisterUserInput {
     name: string;
+    dairyName?: string | undefined;
     email: string;
     phoneNumber: string;
     password: string;
@@ -54,14 +52,12 @@ export interface UpdateUserInput {
     phoneNumber?: string;
 }
 
-// GENERATE OTP
-
+// GENERATE 6 DIGIT OTP
 function generateOtp(): string {
     return randomInt(100000, 1000000).toString();
 }
 
-// HASH OTP
-
+// HASH OTP FOR STORAGE
 function hashOtp(otp: string): string {
     const secret = process.env.OTP_SECRET;
 
@@ -69,13 +65,12 @@ function hashOtp(otp: string): string {
         throw new Error("OTP_SECRET is missing");
     }
 
-    return createHmac("sha256", secret)
-        .update(otp)
+    return createHash("sha256")
+        .update(otp + secret)
         .digest("hex");
 }
 
 // SAVE OTP AND SEND EMAIL
-
 async function sendAndSaveOtp(
     email: string,
     purpose: OtpPurpose
@@ -107,7 +102,6 @@ async function sendAndSaveOtp(
 }
 
 // VERIFY OTP
-
 async function verifyOtp(
     email: string,
     otp: string,
@@ -128,7 +122,7 @@ async function verifyOtp(
         );
     }
 
-    if (otpRecord.expiresAt.getTime() <= Date.now()) {
+    if (new Date() > otpRecord.expiresAt) {
         await updateOtpRepository(otpRecord.id, {
             isUsed: true,
         });
@@ -144,25 +138,11 @@ async function verifyOtp(
         throw new Error("Too many incorrect attempts");
     }
 
-    const storedHash = Buffer.from(
-        otpRecord.otpHash,
-        "hex"
-    );
+    const hashedInputOtp = hashOtp(otp);
 
-    const submittedHash = Buffer.from(
-        hashOtp(otp),
-        "hex"
-    );
-
-    if (
-        storedHash.length !== submittedHash.length ||
-        !timingSafeEqual(storedHash, submittedHash)
-    ) {
-        const attempts = otpRecord.attempts + 1;
-
+    if (hashedInputOtp !== otpRecord.otpHash) {
         await updateOtpRepository(otpRecord.id, {
-            attempts,
-            ...(attempts >= 5 ? { isUsed: true } : {}),
+            attempts: otpRecord.attempts + 1,
         });
 
         throw new Error("Invalid OTP");
@@ -173,12 +153,12 @@ async function verifyOtp(
     });
 }
 
-// REGISTER FIRST ADMIN
-
+// REGISTER FIRST ADMIN (CREATES A NEW TENANT / DAIRY ORGANIZATION)
 export async function registerUserUsecase(
     data: RegisterUserInput
 ) {
     const name = data.name.trim();
+    const dairyName = (data.dairyName || `${name}'s Dairy`).trim();
     const email = data.email.trim().toLowerCase();
     const phoneNumber = data.phoneNumber.trim();
 
@@ -206,14 +186,19 @@ export async function registerUserUsecase(
         };
     }
 
+    // Create a Tenant for this new Admin's Dairy Business
+    const tenant = await createTenantRepository(dairyName, email);
+
     // Hash Admin password
     const hashedPassword = await bcrypt.hash(
         data.password,
         10
     );
 
-    // Create Admin account (role = "admin")
+    // Create Admin account attached to the Tenant
     await createuserRepository({
+        tenantId: tenant.id,
+        dairyName: dairyName,
         name,
         email,
         phoneNumber,
@@ -231,11 +216,12 @@ export async function registerUserUsecase(
     };
 }
 
-// ADMIN CREATES EMPLOYEE
-
+// ADMIN CREATES EMPLOYEE (INHERITS ADMIN'S TENANT)
 export async function createUserByAdminUsecase(
     data: AdminCreateUserInput,
-    createdByRole: UserRole
+    createdByRole: UserRole,
+    adminTenantId?: string,
+    adminDairyName?: string
 ) {
     // Only Admin can create Employees
     if (createdByRole !== "admin") {
@@ -253,8 +239,7 @@ export async function createUserByAdminUsecase(
     }
 
     // Check duplicate email
-    const existingUser =
-        await findUserByEmailRepository(email);
+    const existingUser = await findUserByEmailRepository(email);
 
     if (existingUser) {
         throw new Error("Email already exists");
@@ -269,8 +254,10 @@ export async function createUserByAdminUsecase(
         10
     );
 
-    // Create verified Employee account
+    // Create verified Employee account within the Admin's Tenant
     const employee = await createuserRepository({
+        tenantId: adminTenantId,
+        dairyName: adminDairyName,
         name,
         email,
         phoneNumber,
@@ -306,40 +293,35 @@ export async function createUserByAdminUsecase(
             email: employee.email,
             phoneNumber: employee.phoneNumber,
             role: employee.role,
-            isVerified: employee.isVerified,
-            mustChangePassword: employee.mustChangePassword,
+            tenantId: employee.tenantId,
         },
     };
 }
 
-// GET ALL USERS
-
-export async function getAllUsersUseCase() {
-    return getAllUserRepository();
+// GET ALL USERS (SCOPED TO TENANT)
+export async function getAllUsersUseCase(tenantId?: string) {
+    return getAllUserRepository(tenantId);
 }
 
 // GET USER BY ID
-
 export async function getUserByIdUseCase(id: string) {
     return findUserByIdRepository(id);
 }
 
 // GET USER BY NAME
-
-export async function getUserByNameUseCase(name: string) {
-    return findUserByNameRepository(name);
+export async function getUserByNameUseCase(name: string, tenantId?: string) {
+    return findUserByNameRepository(name, tenantId);
 }
 
 // GET USER BY MOBILE
-
 export async function getUserByMobileUseCase(
-    phoneNumber: string
+    phoneNumber: string,
+    tenantId?: string
 ) {
-    return findUserByMobileRepository(phoneNumber);
+    return findUserByMobileRepository(phoneNumber, tenantId);
 }
 
 // GET USER BY EMAIL
-
 export async function getUserByEmailUseCase(
     email: string
 ) {
@@ -357,7 +339,6 @@ export async function getUserByEmailUseCase(
 }
 
 // UPDATE USER
-
 export async function updateUserUseCase(
     id: string,
     data: UpdateUserInput
@@ -394,9 +375,9 @@ export async function updateUserUseCase(
             if (existingUser) {
                 throw new Error("Email already exists");
             }
-        }
 
-        updateData.email = email;
+            updateData.email = email;
+        }
     }
 
     if (data.phoneNumber !== undefined) {
@@ -417,7 +398,6 @@ export async function updateUserUseCase(
 }
 
 // DELETE USER
-
 export async function deleteUserUseCase(id: string) {
     const user = await findUserByIdRepository(id);
 
@@ -432,8 +412,7 @@ export async function deleteUserUseCase(id: string) {
     };
 }
 
-// VERIFY ADMIN REGISTRATION OTP
-
+// VERIFY REGISTER OTP
 export async function verifyRegisterOtpUsecase(
     email: string,
     otp: string
@@ -456,19 +435,13 @@ export async function verifyRegisterOtpUsecase(
         throw new Error("Email already verified");
     }
 
-    await verifyOtp(
-        normalizedEmail,
-        otp,
-        "register"
-    );
+    await verifyOtp(normalizedEmail, otp, "register");
 
-    await updateUserRepository(user.id, {
-        isVerified: true,
-        mustChangePassword: false,
-    });
-
-    const updatedUser = await findUserByEmailRepository(
-        normalizedEmail
+    const updatedUser = await updateUserRepository(
+        user.id,
+        {
+            isVerified: true,
+        }
     );
 
     if (!updatedUser || !updatedUser.isVerified) {
@@ -476,22 +449,19 @@ export async function verifyRegisterOtpUsecase(
     }
 
     return {
-        message: "Admin email verified successfully",
+        message: "Email verified successfully. You can now login",
     };
 }
 
 // FORGOT PASSWORD
-
-export async function forgetPasswordUsecase(
-    email: string
-) {
+export async function forgetPasswordUsecase(email: string) {
     const normalizedEmail = email.trim().toLowerCase();
 
     const user = await findUserByEmailRepository(
         normalizedEmail
     );
 
-    if (!user || !user.isVerified) {
+    if (!user) {
         return {
             message: "If your account exists, a reset OTP will be sent",
         };
@@ -508,7 +478,6 @@ export async function forgetPasswordUsecase(
 }
 
 // RESET PASSWORD
-
 export async function resetPasswordUsecase(
     email: string,
     otp: string,
@@ -545,12 +514,11 @@ export async function resetPasswordUsecase(
     });
 
     return {
-        message: "Password reset successfully",
+        message: "Password reset successfully. You can now login with your new password",
     };
 }
 
 // CHANGE EMPLOYEE TEMPORARY PASSWORD
-
 export async function changeTemporaryPasswordUsecase(
     userId: string,
     currentPassword: string,
@@ -586,9 +554,17 @@ export async function changeTemporaryPasswordUsecase(
         throw new Error("Temporary password change is not required");
     }
 
+    const fullUser = await findUserByEmailRepository(
+        user.email
+    );
+
+    if (!fullUser) {
+        throw new Error("User not found");
+    }
+
     const isPasswordValid = await bcrypt.compare(
         currentPassword,
-        user.password
+        fullUser.password
     );
 
     if (!isPasswordValid) {
@@ -606,12 +582,11 @@ export async function changeTemporaryPasswordUsecase(
     });
 
     return {
-        message: "Password changed successfully",
+        message: "Password changed successfully. You can now use your new password",
     };
 }
 
-// LOGIN USER
-
+// LOGIN USER (RETURNS TOKEN WITH TENANT DETAILS)
 export async function loginUserUsecase(
     email: string,
     password: string
@@ -652,6 +627,8 @@ export async function loginUserUsecase(
         {
             userId: user.id,
             role: user.role,
+            tenantId: user.tenantId,
+            dairyName: user.dairyName,
         },
         jwtSecret,
         {
@@ -659,98 +636,103 @@ export async function loginUserUsecase(
         }
     );
 
-    const { password: _, ...safeUser } = user;
-
     return {
         message: "Login successful",
         token,
-        user: safeUser,
-        mustChangePassword: user.mustChangePassword,
+        user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            role: user.role,
+            tenantId: user.tenantId,
+            dairyName: user.dairyName,
+            mustChangePassword: user.mustChangePassword,
+        },
     };
 }
 
-// ================= CUSTOMER USECASES =================
-export async function createCustomerUseCase(data: any) {
+// ================= CUSTOMER USECASES (TENANT SCOPED) =================
+export async function createCustomerUseCase(data: any, tenantId?: string) {
     if (!data.name || !data.phone) {
         throw new Error("Customer name and phone are required");
     }
     const { createCustomerRepository } = await import("./repositories");
-    return createCustomerRepository(data);
+    return createCustomerRepository({ ...data, tenantId });
 }
 
-export async function getAllCustomersUseCase() {
+export async function getAllCustomersUseCase(tenantId?: string) {
     const { getAllCustomersRepository } = await import("./repositories");
-    return getAllCustomersRepository();
+    return getAllCustomersRepository(tenantId);
 }
 
-export async function getCustomerByIdUseCase(id: string) {
+export async function getCustomerByIdUseCase(id: string, tenantId?: string) {
     const { findCustomerByIdRepository } = await import("./repositories");
-    const customer = await findCustomerByIdRepository(id);
+    const customer = await findCustomerByIdRepository(id, tenantId);
     if (!customer) throw new Error("Customer not found");
     return customer;
 }
 
-export async function updateCustomerUseCase(id: string, data: any) {
+export async function updateCustomerUseCase(id: string, data: any, tenantId?: string) {
     const { updateCustomerRepository } = await import("./repositories");
-    const updated = await updateCustomerRepository(id, data);
+    const updated = await updateCustomerRepository(id, data, tenantId);
     if (!updated) throw new Error("Customer not found");
     return updated;
 }
 
-export async function deleteCustomerUseCase(id: string) {
+export async function deleteCustomerUseCase(id: string, tenantId?: string) {
     const { deleteCustomerRepository } = await import("./repositories");
-    return deleteCustomerRepository(id);
+    return deleteCustomerRepository(id, tenantId);
 }
 
-// ================= DELIVERY USECASES =================
-export async function createDeliveryUseCase(data: any) {
+// ================= DELIVERY USECASES (TENANT SCOPED) =================
+export async function createDeliveryUseCase(data: any, tenantId?: string) {
     const { createDeliveryRepository } = await import("./repositories");
-    return createDeliveryRepository(data);
+    return createDeliveryRepository({ ...data, tenantId });
 }
 
-export async function getDeliveriesUseCase(date?: string) {
+export async function getDeliveriesUseCase(date?: string, tenantId?: string) {
     const { getDeliveriesByDateRepository, getAllDeliveriesRepository } = await import("./repositories");
     if (date) {
-        return getDeliveriesByDateRepository(date);
+        return getDeliveriesByDateRepository(date, tenantId);
     }
-    return getAllDeliveriesRepository();
+    return getAllDeliveriesRepository(tenantId);
 }
 
-// ================= PAYMENT USECASES =================
-export async function createPaymentUseCase(data: any) {
+// ================= PAYMENT USECASES (TENANT SCOPED) =================
+export async function createPaymentUseCase(data: any, tenantId?: string) {
     const { createPaymentRepository } = await import("./repositories");
-    return createPaymentRepository(data);
+    return createPaymentRepository({ ...data, tenantId });
 }
 
-export async function getPaymentsUseCase() {
+export async function getPaymentsUseCase(tenantId?: string) {
     const { getAllPaymentsRepository } = await import("./repositories");
-    return getAllPaymentsRepository();
+    return getAllPaymentsRepository(tenantId);
 }
 
-// ================= PRICE USECASES =================
-export async function createPriceUseCase(data: any) {
+// ================= PRICE USECASES (TENANT SCOPED) =================
+export async function createPriceUseCase(data: any, tenantId?: string) {
     const { createPriceRepository } = await import("./repositories");
-    return createPriceRepository(data);
+    return createPriceRepository({ ...data, tenantId });
 }
 
-export async function getPricesUseCase() {
+export async function getPricesUseCase(tenantId?: string) {
     const { getAllPricesRepository } = await import("./repositories");
-    return getAllPricesRepository();
+    return getAllPricesRepository(tenantId);
 }
 
-// ================= ATTENDANCE USECASES =================
-export async function recordAttendanceUseCase(data: any) {
+// ================= ATTENDANCE USECASES (TENANT SCOPED) =================
+export async function recordAttendanceUseCase(data: any, tenantId?: string) {
     const { recordAttendanceRepository } = await import("./repositories");
-    return recordAttendanceRepository(data);
+    return recordAttendanceRepository({ ...data, tenantId });
 }
 
-export async function getAttendanceUseCase(date?: string) {
+export async function getAttendanceUseCase(date?: string, tenantId?: string) {
     const { getAttendanceByDateRepository } = await import("./repositories");
     let targetDate: string = new Date().toISOString().split("T")[0]!;
     if (date && typeof date === "string" && date.trim().length > 0) {
         targetDate = date.trim();
     }
-    return getAttendanceByDateRepository(targetDate);
+    return getAttendanceByDateRepository(targetDate, tenantId);
 }
-
 

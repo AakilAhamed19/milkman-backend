@@ -1,4 +1,3 @@
-
 import type { Request, Response } from "express";
 
 import {
@@ -25,10 +24,10 @@ function getErrorMessage(error: unknown): string {
         : "Internal server error";
 }
 
-// REGISTER FIRST ADMIN
+// REGISTER FIRST ADMIN (CREATES DAIRY TENANT)
 export async function registeruser(req: Request, res: Response) {
     try {
-        const { name, email, phoneNumber, password } = req.body ?? {};
+        const { name, dairyName, email, phoneNumber, password } = req.body ?? {};
 
         if (
             typeof name !== "string" ||
@@ -53,6 +52,7 @@ export async function registeruser(req: Request, res: Response) {
 
         const user = await registerUserUsecase({
             name,
+            dairyName: typeof dairyName === "string" ? dairyName : undefined,
             email,
             phoneNumber,
             password,
@@ -120,10 +120,11 @@ export async function verifyRegisterOtp(req: Request, res: Response) {
     }
 }
 
-// GET ALL USERS
+// GET ALL USERS (SCOPED TO TENANT)
 export async function getAllUsers(req: Request, res: Response) {
     try {
-        const users = await getAllUsersUseCase();
+        const tenantId = req.user?.tenantId;
+        const users = await getAllUsersUseCase(tenantId);
 
         return res.status(200).json({
             message: "Users fetched successfully",
@@ -187,13 +188,8 @@ export async function getUserByName(
             });
         }
 
-        const users = await getUserByNameUseCase(name);
-
-        if (users.length === 0) {
-            return res.status(404).json({
-                message: "User not found",
-            });
-        }
+        const tenantId = req.user?.tenantId;
+        const users = await getUserByNameUseCase(name, tenantId);
 
         return res.status(200).json({
             message: "Users fetched successfully",
@@ -203,7 +199,7 @@ export async function getUserByName(
         console.error("Get User By Name Error:", error);
 
         return res.status(500).json({
-            message: "Failed to fetch users",
+            message: "Failed to fetch user",
         });
     }
 }
@@ -222,7 +218,8 @@ export async function getUserByMobile(
             });
         }
 
-        const user = await getUserByMobileUseCase(phoneNumber);
+        const tenantId = req.user?.tenantId;
+        const user = await getUserByMobileUseCase(phoneNumber, tenantId);
 
         if (!user) {
             return res.status(404).json({
@@ -292,30 +289,27 @@ export async function updateUser(
             });
         }
 
-        // Validate UUID format to prevent PostgreSQL 'string_to_uuid' syntax error
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-        if (!isUUID) {
-            return res.status(400).json({
-                message: "Invalid User UUID format",
-            });
-        }
+        const { name, email, phoneNumber } = req.body ?? {};
 
         if (
-            !req.body ||
-            typeof req.body !== "object" ||
-            Array.isArray(req.body) ||
-            Object.keys(req.body).length === 0
+            name === undefined &&
+            email === undefined &&
+            phoneNumber === undefined
         ) {
             return res.status(400).json({
-                message: "Update data is required",
+                message: "At least one field (name, email, phoneNumber) is required to update",
             });
         }
 
-        const user = await updateUserUseCase(id, req.body);
+        const updatedUser = await updateUserUseCase(id, {
+            name,
+            email,
+            phoneNumber,
+        });
 
         return res.status(200).json({
             message: "User updated successfully",
-            user,
+            user: updatedUser,
         });
     } catch (error: unknown) {
         const message = getErrorMessage(error);
@@ -330,9 +324,7 @@ export async function updateUser(
             return res.status(409).json({ message });
         }
 
-        return res.status(500).json({
-            message: "Failed to update user",
-        });
+        return res.status(400).json({ message });
     }
 }
 
@@ -352,10 +344,7 @@ export async function deleteUser(
 
         const result = await deleteUserUseCase(id);
 
-        return res.status(200).json({
-            message: "User deleted successfully",
-            result,
-        });
+        return res.status(200).json(result);
     } catch (error: unknown) {
         const message = getErrorMessage(error);
 
@@ -365,9 +354,57 @@ export async function deleteUser(
             return res.status(404).json({ message });
         }
 
-        return res.status(500).json({
-            message: "Failed to delete user",
-        });
+        return res.status(400).json({ message });
+    }
+}
+
+// ADMIN CREATES EMPLOYEE
+export async function createUserByAdmin(
+    req: Request,
+    res: Response
+) {
+    try {
+        const { name, email, phoneNumber } = req.body ?? {};
+
+        if (
+            typeof name !== "string" ||
+            typeof email !== "string" ||
+            typeof phoneNumber !== "string" ||
+            !name.trim() ||
+            !email.trim() ||
+            !phoneNumber.trim()
+        ) {
+            return res.status(400).json({
+                message: "All fields are required",
+            });
+        }
+
+        const createdByRole = req.user?.role as any;
+        const adminTenantId = req.user?.tenantId;
+        const adminDairyName = req.user?.dairyName;
+
+        const result = await createUserByAdminUsecase(
+            {
+                name,
+                email,
+                phoneNumber,
+            },
+            createdByRole,
+            adminTenantId,
+            adminDairyName
+        );
+
+        return res.status(201).json(result);
+    } catch (error: unknown) {
+        const message = getErrorMessage(error);
+
+        console.error("Create User By Admin Error:", error);
+
+        if (message === "Email already exists") {
+            return res.status(409).json({ message });
+        }
+
+        return res.status(400).json({ message });
     }
 }
 
@@ -387,7 +424,10 @@ export async function loginUser(req: Request, res: Response) {
             });
         }
 
-        const result = await loginUserUsecase(email, password);
+        const result = await loginUserUsecase(
+            email.trim(),
+            password.trim()
+        );
 
         return res.status(200).json(result);
     } catch (error: unknown) {
@@ -395,16 +435,15 @@ export async function loginUser(req: Request, res: Response) {
 
         console.error("Login Error:", error);
 
-        if (message === "Invalid email or password") {
+        if (
+            message === "Invalid email or password" ||
+            message === "Please verify your email before login"
+        ) {
             return res.status(401).json({ message });
         }
 
-        if (message === "Please verify your email before login") {
-            return res.status(403).json({ message });
-        }
-
         return res.status(500).json({
-            message: "Login failed",
+            message: "Failed to login. Please try again",
         });
     }
 }
@@ -420,14 +459,16 @@ export async function forgetPassword(req: Request, res: Response) {
             });
         }
 
-        const result = await forgetPasswordUsecase(email);
+        const result = await forgetPasswordUsecase(
+            email.trim()
+        );
 
         return res.status(200).json(result);
     } catch (error: unknown) {
         console.error("Forgot Password Error:", error);
 
         return res.status(500).json({
-            message: "Failed to process forgot password request",
+            message: "Failed to process request. Please try again",
         });
     }
 }
@@ -446,20 +487,14 @@ export async function resetPassword(req: Request, res: Response) {
             !newPassword.trim()
         ) {
             return res.status(400).json({
-                message: "Email, OTP and new password are required",
-            });
-        }
-
-        if (newPassword.length < 8) {
-            return res.status(400).json({
-                message: "Password must be at least 8 characters",
+                message: "All fields are required",
             });
         }
 
         const result = await resetPasswordUsecase(
             email.trim(),
             otp.trim(),
-            newPassword
+            newPassword.trim()
         );
 
         return res.status(200).json(result);
@@ -468,84 +503,11 @@ export async function resetPassword(req: Request, res: Response) {
 
         console.error("Reset Password Error:", error);
 
-        if (
-            message === "Invalid or expired OTP" ||
-            message === "OTP expired" ||
-            message === "OTP not found. Please request a new OTP" ||
-            message === "Invalid OTP" ||
-            message === "Too many incorrect attempts"
-        ) {
-            return res.status(400).json({ message });
-        }
-
-        return res.status(500).json({
-            message: "Password reset failed",
-        });
+        return res.status(400).json({ message });
     }
 }
 
-// CREATE EMPLOYEE BY ADMIN
-export async function createUserByAdmin(req: Request, res: Response) {
-    try {
-        const { name, email, phoneNumber } = req.body ?? {};
-
-        if (!req.user || req.user.role !== "admin") {
-            return res.status(403).json({
-                message: "Access denied. Admin only",
-            });
-        }
-
-        if (
-            typeof name !== "string" ||
-            typeof email !== "string" ||
-            typeof phoneNumber !== "string" ||
-            !name.trim() ||
-            !email.trim() ||
-            !phoneNumber.trim()
-        ) {
-            return res.status(400).json({
-                message: "Name, email and phone number are required",
-            });
-        }
-
-        const result = await createUserByAdminUsecase(
-            {
-                name: name.trim(),
-                email: email.trim().toLowerCase(),
-                phoneNumber: phoneNumber.trim(),
-            },
-            req.user.role
-        );
-
-        return res.status(201).json({
-            message: result.message,
-            employee: result.employee,
-        });
-    } catch (error: unknown) {
-        const message = getErrorMessage(error);
-
-        console.error("Admin Create Employee Error:", error);
-
-        if (message === "Email already exists") {
-            return res.status(409).json({ message });
-        }
-
-        if (message === "Access denied. Admin only") {
-            return res.status(403).json({ message });
-        }
-
-        if (message === "All fields are required") {
-            return res.status(400).json({ message });
-        }
-
-        return res.status(500).json({
-            message: "Failed to create employee",
-            error: message,
-        });
-    }
-}
-
-// EMPLOYEE CHANGE TEMPORARY PASSWORD
+// CHANGE EMPLOYEE TEMPORARY PASSWORD
 export async function changeTemporaryPassword(
     req: Request,
     res: Response
@@ -560,58 +522,40 @@ export async function changeTemporaryPassword(
             !newPassword.trim()
         ) {
             return res.status(400).json({
-                message: "Current password and new password are required",
+                message: "Both passwords are required",
             });
         }
 
-        if (newPassword.length < 8) {
-            return res.status(400).json({
-                message: "New password must be at least 8 characters",
-            });
-        }
+        const userId = req.user?.userId;
 
-        if (!req.user?.userId) {
+        if (!userId) {
             return res.status(401).json({
                 message: "Authentication required",
             });
         }
 
         const result = await changeTemporaryPasswordUsecase(
-            req.user.userId,
-            currentPassword,
-            newPassword
+            userId,
+            currentPassword.trim(),
+            newPassword.trim()
         );
 
         return res.status(200).json(result);
     } catch (error: unknown) {
         const message = getErrorMessage(error);
 
-        console.error("Change Temporary Password Error:", error);
+        console.error("Change Password Error:", error);
 
-        if (message === "Invalid current password") {
-            return res.status(401).json({ message });
-        }
-
-        if (
-            message === "User not found" ||
-            message === "Employee does not need to change password" ||
-            message.includes("User not found")
-        ) {
-            return res.status(404).json({ message });
-        }
-
-        return res.status(500).json({
-            message: "Failed to change password",
-            error: message,
-        });
+        return res.status(400).json({ message });
     }
 }
 
-// ================= CUSTOMER CONTROLLERS =================
+// ================= CUSTOMER CONTROLLERS (TENANT SCOPED) =================
 export async function getCustomers(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { getAllCustomersUseCase } = await import("./usecase");
-        const customers = await getAllCustomersUseCase();
+        const customers = await getAllCustomersUseCase(tenantId);
         return res.status(200).json({
             message: "Customers fetched successfully",
             customers,
@@ -626,8 +570,9 @@ export async function getCustomers(req: Request, res: Response) {
 
 export async function createCustomer(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { createCustomerUseCase } = await import("./usecase");
-        const customer = await createCustomerUseCase(req.body);
+        const customer = await createCustomerUseCase(req.body, tenantId);
         return res.status(201).json({
             message: "Customer created successfully",
             customer,
@@ -642,8 +587,10 @@ export async function createCustomer(req: Request, res: Response) {
 
 export async function updateCustomer(req: Request<{ id: string }>, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
+        const { id } = req.params;
         const { updateCustomerUseCase } = await import("./usecase");
-        const customer = await updateCustomerUseCase(req.params.id, req.body);
+        const customer = await updateCustomerUseCase(id, req.body, tenantId);
         return res.status(200).json({
             message: "Customer updated successfully",
             customer,
@@ -658,8 +605,10 @@ export async function updateCustomer(req: Request<{ id: string }>, res: Response
 
 export async function deleteCustomer(req: Request<{ id: string }>, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
+        const { id } = req.params;
         const { deleteCustomerUseCase } = await import("./usecase");
-        await deleteCustomerUseCase(req.params.id);
+        await deleteCustomerUseCase(id, tenantId);
         return res.status(200).json({
             message: "Customer deleted successfully",
         });
@@ -671,12 +620,13 @@ export async function deleteCustomer(req: Request<{ id: string }>, res: Response
     }
 }
 
-// ================= DELIVERY CONTROLLERS =================
+// ================= DELIVERY CONTROLLERS (TENANT SCOPED) =================
 export async function getDeliveries(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const date = typeof req.query.date === "string" ? req.query.date : undefined;
         const { getDeliveriesUseCase } = await import("./usecase");
-        const deliveries = await getDeliveriesUseCase(date);
+        const deliveries = await getDeliveriesUseCase(date, tenantId);
         return res.status(200).json({
             message: "Deliveries fetched successfully",
             deliveries,
@@ -691,8 +641,9 @@ export async function getDeliveries(req: Request, res: Response) {
 
 export async function createDelivery(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { createDeliveryUseCase } = await import("./usecase");
-        const delivery = await createDeliveryUseCase(req.body);
+        const delivery = await createDeliveryUseCase(req.body, tenantId);
         return res.status(201).json({
             message: "Delivery recorded successfully",
             delivery,
@@ -705,11 +656,12 @@ export async function createDelivery(req: Request, res: Response) {
     }
 }
 
-// ================= PAYMENT CONTROLLERS =================
+// ================= PAYMENT CONTROLLERS (TENANT SCOPED) =================
 export async function getPayments(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { getPaymentsUseCase } = await import("./usecase");
-        const payments = await getPaymentsUseCase();
+        const payments = await getPaymentsUseCase(tenantId);
         return res.status(200).json({
             message: "Payments fetched successfully",
             payments,
@@ -724,8 +676,9 @@ export async function getPayments(req: Request, res: Response) {
 
 export async function createPayment(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { createPaymentUseCase } = await import("./usecase");
-        const payment = await createPaymentUseCase(req.body);
+        const payment = await createPaymentUseCase(req.body, tenantId);
         return res.status(201).json({
             message: "Payment recorded successfully",
             payment,
@@ -738,11 +691,12 @@ export async function createPayment(req: Request, res: Response) {
     }
 }
 
-// ================= PRICE CONTROLLERS =================
+// ================= PRICE CONTROLLERS (TENANT SCOPED) =================
 export async function getPrices(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { getPricesUseCase } = await import("./usecase");
-        const prices = await getPricesUseCase();
+        const prices = await getPricesUseCase(tenantId);
         return res.status(200).json({
             message: "Prices fetched successfully",
             prices,
@@ -757,8 +711,9 @@ export async function getPrices(req: Request, res: Response) {
 
 export async function createPrice(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { createPriceUseCase } = await import("./usecase");
-        const price = await createPriceUseCase(req.body);
+        const price = await createPriceUseCase(req.body, tenantId);
         return res.status(201).json({
             message: "Price saved successfully",
             price,
@@ -771,12 +726,13 @@ export async function createPrice(req: Request, res: Response) {
     }
 }
 
-// ================= ATTENDANCE CONTROLLERS =================
+// ================= ATTENDANCE CONTROLLERS (TENANT SCOPED) =================
 export async function getAttendance(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const dateParam = typeof req.query.date === "string" ? req.query.date : undefined;
         const { getAttendanceUseCase } = await import("./usecase");
-        const attendance = await getAttendanceUseCase(dateParam);
+        const attendance = await getAttendanceUseCase(dateParam, tenantId);
         return res.status(200).json({
             message: "Attendance fetched successfully",
             attendance,
@@ -791,8 +747,9 @@ export async function getAttendance(req: Request, res: Response) {
 
 export async function recordAttendance(req: Request, res: Response) {
     try {
+        const tenantId = req.user?.tenantId;
         const { recordAttendanceUseCase } = await import("./usecase");
-        const attendance = await recordAttendanceUseCase(req.body);
+        const attendance = await recordAttendanceUseCase(req.body, tenantId);
         return res.status(200).json({
             message: "Attendance recorded successfully",
             attendance,
@@ -804,3 +761,5 @@ export async function recordAttendance(req: Request, res: Response) {
         });
     }
 }
+
+

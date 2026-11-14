@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-// JWT PAYLOAD TYPE
-interface JwtPayload {
+// JWT PAYLOAD TYPE WITH TENANT ID
+export interface JwtPayload {
     userId: string;
     role: string;
+    tenantId?: string;
+    dairyName?: string;
 }
 
 // EXTEND EXPRESS REQUEST TYPE
@@ -21,7 +23,7 @@ export function authMiddleware(
     req: Request,
     res: Response,
     next: NextFunction
-):void {
+): void {
     try {
         // Get Authorization header 
         const authHeader = req.headers.authorization;
@@ -54,11 +56,12 @@ export function authMiddleware(
         }
 
         // Verify token
-        const decoded = jwt.verify(token, jwtSecret);
+        const decoded = jwt.verify(token, jwtSecret) as any;
 
         // Check payload
         if (
-            typeof decoded === "string" ||
+            !decoded ||
+            typeof decoded !== "object" ||
             typeof decoded.userId !== "string" ||
             typeof decoded.role !== "string"
         ) {
@@ -68,10 +71,12 @@ export function authMiddleware(
             return;
         }
 
-        // Attach user details to request
+        // Attach user and tenant details to request
         req.user = {
             userId: decoded.userId,
             role: decoded.role,
+            tenantId: decoded.tenantId,
+            dairyName: decoded.dairyName,
         };
 
         // Continue to controller
@@ -85,6 +90,7 @@ export function authMiddleware(
         });
     }
 }
+
 // ADMIN-ONLY MIDDLEWARE
 export function adminOnly(
     req: Request,

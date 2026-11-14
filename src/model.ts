@@ -3,16 +3,40 @@ import {
     PrimaryGeneratedColumn,
     Column,
     CreateDateColumn,
+    Index,
 } from "typeorm";
 
 export type otpPurpose = "register" | "reset_password";
 export type userRole = "admin" | "employee";
+
+// TENANT ENTITY (Dairy Organization / Business)
+@Entity()
+export class TenantEntity {
+    @PrimaryGeneratedColumn("uuid")
+    id!: string;
+
+    @Column({ type: "varchar" })
+    name!: string;
+
+    @Column({ type: "varchar", nullable: true })
+    ownerEmail!: string | null;
+
+    @CreateDateColumn()
+    createdAt!: Date;
+}
 
 // USER ENTITY
 @Entity()
 export class User {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
+
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
+
+    @Column({ type: "varchar", nullable: true })
+    dairyName!: string | null | undefined;
 
     @Column({ type: "varchar" })
     name!: string;
@@ -78,6 +102,10 @@ export class CustomerEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
+
     @Column({ type: "varchar" })
     name!: string;
 
@@ -121,6 +149,10 @@ export class DeliveryEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
+
     @Column({ type: "varchar" })
     customerId!: string;
 
@@ -146,6 +178,10 @@ export class PaymentEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
+
     @Column({ type: "varchar" })
     customerId!: string;
 
@@ -159,7 +195,7 @@ export class PaymentEntity {
     mode!: "cash" | "upi" | "bank";
 
     @Column({ type: "text", nullable: true })
-    note!: string;
+    note!: string | null;
 
     @CreateDateColumn()
     createdAt!: Date;
@@ -170,6 +206,10 @@ export class PaymentEntity {
 export class PriceEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
+
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
 
     @Column({ type: "varchar" })
     milkType!: string;
@@ -190,6 +230,10 @@ export class AttendanceEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
+    @Index()
+    @Column({ type: "varchar", nullable: true })
+    tenantId!: string | null | undefined;
+
     @Column({ type: "varchar" })
     employeeId!: string;
 
@@ -200,7 +244,7 @@ export class AttendanceEntity {
     status!: "present" | "half-day" | "absent";
 
     @Column({ type: "text", nullable: true })
-    notes!: string;
+    notes!: string | null;
 
     @CreateDateColumn()
     createdAt!: Date;
