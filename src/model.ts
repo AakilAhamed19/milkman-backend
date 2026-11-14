@@ -4,13 +4,18 @@ import {
     Column,
     CreateDateColumn,
     Index,
+    ManyToOne,
+    OneToMany,
+    JoinColumn,
 } from "typeorm";
 
 export type otpPurpose = "register" | "reset_password";
 export type userRole = "admin" | "employee";
 
-// FARM ENTITY (Organization / Farm representing each Dairy business)
-@Entity()
+// ==========================================
+// FARM ENTITY (Core Organization / Farm)
+// ==========================================
+@Entity("farms")
 export class Farm {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -29,10 +34,31 @@ export class Farm {
 
     @CreateDateColumn()
     createdAt!: Date;
+
+    // Relational links to all entities belonging to this farm
+    @OneToMany(() => User, (user) => user.farm)
+    users!: User[];
+
+    @OneToMany(() => CustomerEntity, (customer) => customer.farm)
+    customers!: CustomerEntity[];
+
+    @OneToMany(() => DeliveryEntity, (delivery) => delivery.farm)
+    deliveries!: DeliveryEntity[];
+
+    @OneToMany(() => PaymentEntity, (payment) => payment.farm)
+    payments!: PaymentEntity[];
+
+    @OneToMany(() => PriceEntity, (price) => price.farm)
+    prices!: PriceEntity[];
+
+    @OneToMany(() => AttendanceEntity, (attendance) => attendance.farm)
+    attendances!: AttendanceEntity[];
 }
 
-// USER ENTITY (Admin or Employee belonging to a Farm)
-@Entity()
+// ==========================================
+// USER ENTITY (Admin or Employee of a Farm)
+// ==========================================
+@Entity("users")
 export class User {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -40,6 +66,10 @@ export class User {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.users, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar", nullable: true })
     farmName!: string | null | undefined;
@@ -71,8 +101,10 @@ export class User {
     mustChangePassword!: boolean;
 }
 
+// ==========================================
 // OTP ENTITY
-@Entity()
+// ==========================================
+@Entity("otps")
 export class otp {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -102,8 +134,10 @@ export class otp {
     createdAt!: Date;
 }
 
-// CUSTOMER ENTITY (Scoped to Farm)
-@Entity()
+// ==========================================
+// CUSTOMER ENTITY (Scoped & Related to Farm)
+// ==========================================
+@Entity("customers")
 export class CustomerEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -111,6 +145,10 @@ export class CustomerEntity {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.customers, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar" })
     name!: string;
@@ -149,8 +187,10 @@ export class CustomerEntity {
     createdAt!: Date;
 }
 
-// DELIVERY ENTITY (Scoped to Farm)
-@Entity()
+// ==========================================
+// DELIVERY ENTITY (Scoped & Related to Farm)
+// ==========================================
+@Entity("deliveries")
 export class DeliveryEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -158,6 +198,10 @@ export class DeliveryEntity {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.deliveries, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar" })
     customerId!: string;
@@ -178,8 +222,10 @@ export class DeliveryEntity {
     createdAt!: Date;
 }
 
-// PAYMENT ENTITY (Scoped to Farm)
-@Entity()
+// ==========================================
+// PAYMENT ENTITY (Scoped & Related to Farm)
+// ==========================================
+@Entity("payments")
 export class PaymentEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -187,6 +233,10 @@ export class PaymentEntity {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.payments, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar" })
     customerId!: string;
@@ -207,8 +257,10 @@ export class PaymentEntity {
     createdAt!: Date;
 }
 
-// PRICE ENTITY (Scoped to Farm)
-@Entity()
+// ==========================================
+// PRICE ENTITY (Scoped & Related to Farm)
+// ==========================================
+@Entity("prices")
 export class PriceEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -216,6 +268,10 @@ export class PriceEntity {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.prices, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar" })
     milkType!: string;
@@ -230,8 +286,10 @@ export class PriceEntity {
     createdAt!: Date;
 }
 
-// ATTENDANCE ENTITY (Scoped to Farm)
-@Entity()
+// ==========================================
+// ATTENDANCE ENTITY (Scoped & Related to Farm)
+// ==========================================
+@Entity("attendances")
 export class AttendanceEntity {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
@@ -239,6 +297,10 @@ export class AttendanceEntity {
     @Index()
     @Column({ type: "varchar", nullable: true })
     farmId!: string | null | undefined;
+
+    @ManyToOne(() => Farm, (farm) => farm.attendances, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "farmId" })
+    farm?: Farm | null;
 
     @Column({ type: "varchar" })
     employeeId!: string;
